@@ -4,11 +4,28 @@ import Link from "next/link";
 import { useAuth } from "../lib/AuthContext"; // Importujemy naszego hooka
 import { auth } from "../lib/firebase";
 import { signOut } from "firebase/auth";
+import { useEffect } from "react";
 
 export default function Home() {
   // Wyciągamy informacje o użytkowniku w 1 linijce!
   const { user, loading } = useAuth();
 
+  useEffect(() => {
+    // 1. Tworzymy wewnętrzną funkcję asynchroniczną
+    const printMyToken = async () => {
+      // 2. Sprawdzamy, czy użytkownik faktycznie jest zalogowany
+      if (user) {
+        const token = await user.getIdToken();
+        console.log("====================================");
+        console.log("MÓJ TOKEN:", token);
+        console.log("====================================");
+      }
+    };
+
+    // 3. Wywołujemy ją
+    printMyToken();
+    
+  }, [user]);
   const handleLogout = async () => {
     await signOut(auth);
     alert("Wylogowano pomyślnie");
