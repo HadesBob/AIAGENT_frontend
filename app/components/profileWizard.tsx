@@ -28,6 +28,8 @@ export default function ProfileWizard() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const API_URL = process.env.NEXT_PUBLIC_API_URL
+
   // Funkcja aktualizująca stan formularza
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -65,7 +67,7 @@ export default function ProfileWizard() {
           .filter((item) => item !== ""),
       };
 
-      const res = await fetch("http://localhost:8000/api/profiles", {
+      const res = await fetch(`${API_URL}/api/profiles`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -95,7 +97,7 @@ export default function ProfileWizard() {
 
     try {
       const token = await user.getIdToken();
-      const res = await fetch("http://localhost:8000/api/profiles/diets", {
+      const res = await fetch(`${API_URL}/api/profiles/diets`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
