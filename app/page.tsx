@@ -1,24 +1,16 @@
-"use client"; // Musimy to dodać, bo używamy hooka klienckiego
+"use client"; 
 
 import Link from "next/link";
-import { useAuth } from "../lib/AuthContext"; // Importujemy naszego hooka
+
 import { auth } from "../lib/firebase";
 import { signOut } from "firebase/auth";
 import { useEffect } from "react";
-import AnimatedHeroCard from "./components/AnimatedHeroCard";
+import { useRouter } from "next/router";
 
-const NAV_LINKS = [
-  { label: "Jak to działa", href: "#jak-to-dziala" },
-  { label: "Funkcje", href: "#funkcje" },
-  { label: "Przykładowy plan", href: "#przyklad" },
-  { label: "Cennik", href: "#cennik" },
-];
+import Navigation from "./components/Navigation";
+import Hero from "./components/Home/Hero";
 
-const STATS = [
-  { value: "12 400+", label: "wygenerowanych planów" },
-  { value: "94%", label: "trafność w cel makro" },
-  { value: "3 min", label: "średni czas generowania" },
-];
+
 
 const STEPS = [
   {
@@ -119,79 +111,8 @@ const PLANS = [
 export default function Home() {
   return (
     <main className="min-h-screen bg-paper">
-      {/* NAV */}
-      <header className="sticky top-0 z-40 border-b border-line/70 bg-paper/85 backdrop-blur">
-        <div className="mx-auto flex max-w-content items-center justify-between px-6 py-4">
-          <a href="#" className="font-display text-2xl tracking-tight text-ink">
-            Talerz
-          </a>
-          <nav className="hidden md:flex items-center gap-8">
-            {NAV_LINKS.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                className="text-sm text-charcoal/70 hover:text-ink transition-colors"
-              >
-                {link.label}
-              </a>
-            ))}
-          </nav>
-          <a
-            href="#generuj"
-            className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-paper transition-transform hover:scale-[1.03]"
-          >
-            Wygeneruj dietę
-          </a>
-        </div>
-      </header>
 
-      {/* HERO */}
-      <section className="mx-auto max-w-content px-6 pt-14 pb-20 sm:pt-20 sm:pb-28">
-        <div className="grid gap-14 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
-          <div>
-            <p className="eyebrow text-olive mb-5">Generator diet napędzany AI</p>
-            <h1 className="font-display text-[2.6rem] leading-[1.05] text-ink sm:text-6xl sm:leading-[1.02]">
-              Twoja dieta,
-              <br />
-              <span className="italic">ułożona co do grama.</span>
-            </h1>
-            <p className="mt-6 max-w-lg text-lg text-charcoal/75">
-              Podaj cel, wagę i to, czego nie jadasz. W trzy minuty dostajesz
-              plan posiłków z listą zakupów i dokładnym rozkładem
-              makroskładników — dopasowany, nie uśredniony.
-            </p>
-
-            <div className="mt-9 flex flex-wrap items-center gap-4">
-              <a
-                href="#generuj"
-                className="rounded-full bg-carrot px-7 py-3.5 text-sm font-semibold text-white shadow-[0_12px_24px_-8px_rgba(255,107,53,0.55)] transition-transform hover:scale-[1.03]"
-              >
-                Wygeneruj swoją dietę
-              </a>
-              <a
-                href="#przyklad"
-                className="rounded-full border border-ink/15 px-7 py-3.5 text-sm font-medium text-ink transition-colors hover:bg-ink hover:text-paper"
-              >
-                Zobacz przykładowy plan
-              </a>
-            </div>
-
-            <dl className="mt-14 grid max-w-md grid-cols-3 gap-6 border-t border-line pt-6">
-              {STATS.map((stat) => (
-                <div key={stat.label}>
-                  <dt className="sr-only">{stat.label}</dt>
-                  <dd className="font-mono text-xl text-ink sm:text-2xl">{stat.value}</dd>
-                  <dd className="mt-1 text-xs leading-snug text-charcoal/60">{stat.label}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-
-          <div className="flex justify-center lg:justify-end">
-            <AnimatedHeroCard />
-          </div>
-        </div>
-      </section>
+      <Hero />
 
       {/* HOW IT WORKS */}
       <section id="jak-to-dziala" className="border-t border-line bg-white">

@@ -11,10 +11,16 @@
   --color-charcoal: #2B2B26;  /* body text */
   --color-line: #DCE3D6;      /* hairline borders */
 
+  --color-brand-orange: #d4b115;
+  --color-brand-charcoal: #262626;
+  --color-brand-teal: #0E7490;
+  --color-brand-blue: #1E3A8A;
+  --color-brand-green: #6B8E23;
+
   /* Czcionki */
-  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-headline: var(--font-crimson);
+  --font-lora: var(--font-lora);
+  --font-roboto: var(--font-roboto);
 
   /* Rozmiary (W v4 'spacing' generuje klasy w-, h-, max-w- itp.) */
   --spacing-content: 1180px;
@@ -52,7 +58,7 @@
   }
 
   body {
-    @apply bg-paper text-charcoal antialiased;
+    @apply text-black antialiased max-w-screen p-0 m-0;
   }
 
   ::selection {
@@ -73,7 +79,7 @@
   }
 }
 
-/* 4. MEDIA QUERIES (Dostępność) */
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

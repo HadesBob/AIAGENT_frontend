@@ -45,7 +45,7 @@ export default function AuthPage() {
       }
       
       // Po udanym logowaniu/rejestracji przenosimy na stronę główną
-      router.push("/");
+      router.push("/dashboard");
       
     } catch (err: any) {
       console.error(err);
