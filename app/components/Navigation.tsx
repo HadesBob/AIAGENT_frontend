@@ -1,138 +1,114 @@
-"use client"
+"use client";
 
-import { useAuth } from "@/lib/AuthContext";
-import { auth } from "@/lib/firebase";
-import { signOut } from "firebase/auth";
-import { Bell, ChevronDown, Settings, LogOut, User } from "lucide-react";
-import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Home, Utensils, Sparkles, User, ChefHat } from "lucide-react";
 
 export default function Navigation() {
+  const pathname = usePathname();
 
-  const { user } = useAuth();
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false); // 2. Stan menu
-
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      setIsDropdownOpen(false);
-    } catch (error) {
-      console.error("Błąd wylogowywania", error);
-    }
-  };
-
-  const NAV_LINKS = [
-
-    { label: "Przepisy", href: "/przepisy" },
-    { label: "Diety", href: "/diety" },
-    { label: "Cennik", href: "/cennik" },
-    { label: "BMI", href: "/oblicz-bmi" },
-    { label: "Blog", href: "/blog" },
+  // Tablica z konfiguracją linków ułatwia zarządzanie menu
+  const navItems = [
+    { name: "Pulpit", href: "/", icon: Home },
+    { name: "Przepisy", href: "/przepisy", icon: Utensils },
+    { name: "Nowy", href: "/przepisy/nowy", icon: Sparkles, isPrimary: true },
+    { name: "Mój Plan", href: "/auth", icon: User },
   ];
 
-
-
   return (
-    <header className="sticky top-0 z-40 border-b border-line/70 bg-green-200 backdrop-blur max-w-screen">
-      <div className="mx-auto flex items-center justify-between px-6 py-4">
-        <a href="#" className="font-headline text-4xl tracking-tight text-ink">
-          Food
-          <span className="bg-black/80 text-brand-orange  p-2 mx-1 rounded-sm">Maniak</span>
-
-        </a>
-        <nav className="hidden md:flex items-center gap-8">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="relative text-ink font-medium py-1
-                   after:absolute after:bottom-0 after:left-1/2 after:-translate-x-1/2 
-                   after:w-0 after:h-[2px] after:bg-green-600 
-                   after:transition-all after:duration-300 ease-in-out
-                   hover:after:w-full hover:text-green-600 transition-colors
-                   font-lora text-2xl"
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-        <div className="flex justify-between" >
-          <a
-            href="/dashboard"
-            className="rounded-lg border-2 border-black/80 px-5 py-2.5 mx-1.5 text-black font-bold  uppercase
-                    transition-transform hover:scale-[1.03] hover:bg-black/80 hover:text-brand-orange"
-          >
-            Twoja Dieta
-          </a>
-
-
-          {user ? (
-            <div className="flex items-center gap-5">
-              <button className="relative p-2 text-charcoal hover:bg-white rounded-full transition-colors">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-carrot rounded-full border-2 border-paper"></span>
-              </button>
-
-              {/* 3. Rodzic musi mieć klasę 'relative', aby menu pozycjonowało się względem niego */}
-              <div className="relative">
-                <button
-                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                  // onBlur zamknie menu, gdy użytkownik kliknie gdziekolwiek indziej na ekranie
-                  onBlur={() => setTimeout(() => setIsDropdownOpen(false), 150)}
-                  className="flex items-center gap-2 text-sm font-medium text-ink hover:text-carrot transition-colors"
-                >
-                  <span>{user.displayName || "Użytkownik"}</span>
-                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`} />
-                </button>
-
-                {/* 4. Rozwijane menu (pozycjonowanie absolutne) */}
-                {isDropdownOpen && (
-                  <div className="absolute right-0 mt-3 w-48 bg-white border border-line rounded-xl shadow-lg overflow-hidden z-50 animate-fade-up">
-                    <div className="px-4 py-3 border-b border-line bg-gray-50">
-                      <p className="text-xs text-charcoal truncate">{user.email}</p>
-                    </div>
-
-                    <div className="p-1">
-                      <Link href="/profile" className="flex items-center gap-2 px-3 py-2 text-sm text-ink hover:bg-paper rounded-lg transition-colors">
-                        <User className="w-4 h-4" />
-                        Mój profil
-                      </Link>
-                      <Link href="/settings" className="flex items-center gap-2 px-3 py-2 text-sm text-ink hover:bg-paper rounded-lg transition-colors">
-                        <Settings className="w-4 h-4" />
-                        Ustawienia
-                      </Link>
-
-                      <div className="h-px bg-line my-1"></div>
-
-                      <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors text-left"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        Wyloguj
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+    <>
+      {/* 🖥️ NAWIGACJA DESKTOPOWA (Top Bar) - Ukryta na urządzeniach mobilnych */}
+      <header className="hidden md:block fixed top-0 w-full bg-white/90 backdrop-blur-md border-b border-zinc-200 z-50">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          
+          {/* Logo */}
+          <Link href="/" className="flex items-center gap-2 group">
+            <div className="p-2 bg-orange-100 text-orange-600 rounded-lg group-hover:bg-orange-500 group-hover:text-white transition-colors">
+              <ChefHat className="w-6 h-6" />
             </div>
+            <span className="text-xl font-bold text-zinc-900 tracking-tight">
+              Foodmaniak <span className="text-orange-500">AI</span>
+            </span>
+          </Link>
 
-          ) : (
-            <a
-              href="/auth"
-              className="rounded-lg bg-black/80 px-5 py-2.5 font-bold font-display text-brand-orange uppercase
-                transition-transform hover:scale-[1.05]"
-            >
-              Zaloguj się
-            </a>
-          )}
+          {/* Linki desktopowe */}
+          <nav className="flex items-center gap-1">
+            {navItems.map((item) => {
+              const isActive = pathname === item.href;
+              const Icon = item.icon;
 
+              if (item.isPrimary) {
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="ml-4 flex items-center gap-2 px-5 py-2.5 bg-zinc-900 text-white font-medium rounded-xl hover:bg-zinc-800 transition-colors"
+                  >
+                    <Icon className="w-4 h-4" />
+                    Wygeneruj
+                  </Link>
+                );
+              }
 
-
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-colors ${
+                    isActive
+                      ? "bg-zinc-100 text-zinc-900"
+                      : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {item.name}
+                </Link>
+              );
+            })}
+          </nav>
         </div>
+      </header>
 
-      </div>
-    </header>
+      {/* 📱 NAWIGACJA MOBILNA (Bottom Bar) - Ukryta na desktopie */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-zinc-200 pb-safe z-50 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
+        <div className="flex justify-around items-center h-16 px-2">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href;
+            const Icon = item.icon;
 
-  )
+            // Wyróżniony przycisk centralny (np. dodawanie/generowanie)
+            if (item.isPrimary) {
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="flex flex-col items-center justify-center w-14 h-14 -mt-6 bg-zinc-900 text-white rounded-full shadow-lg border-4 border-zinc-50 hover:bg-zinc-800 transition-transform active:scale-95"
+                >
+                  <Icon className="w-6 h-6" />
+                </Link>
+              );
+            }
+
+            // Standardowe zakładki mobilne
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex flex-col items-center justify-center w-16 h-full gap-1 transition-colors ${
+                  isActive ? "text-orange-600" : "text-zinc-400 hover:text-zinc-600"
+                }`}
+              >
+                <div className={`p-1 rounded-full ${isActive ? "bg-orange-100" : ""}`}>
+                  <Icon className={`w-5 h-5 ${isActive ? "stroke-[2.5px]" : "stroke-2"}`} />
+                </div>
+                <span className="text-[10px] font-medium tracking-wide">
+                  {item.name}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+    </>
+  );
 }
