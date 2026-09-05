@@ -17,6 +17,8 @@
   --color-brand-blue: #1E3A8A;
   --color-brand-green: #6B8E23;
 
+  --color-brand-main: #8AB661;
+  --color-brand-secondary: #6B1D51;
   /* Czcionki */
   --font-headline: var(--font-crimson);
   --font-lora: var(--font-lora);

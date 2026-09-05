@@ -1,316 +1,509 @@
 "use client";
 
-import { useState } from "react";
-// Pamiętaj o zaimportowaniu swojego hooka autoryzacji:
-import { useAuth } from "../../lib/AuthContext"; 
+import { useState, useMemo } from "react";
+import { Check, Calendar, BarChart2, ChevronRight, ChevronLeft, Flame, Scale, Activity, Apple, Loader2, Utensils } from "lucide-react";
+import { useAuth } from "@/lib/AuthContext"; 
 
-export default function ProfileWizard() {
+// --- TYPY DANYCH ---
+type Goal = "lose_weight" | "maintain" | "gain_weight";
+type Gender = "male" | "female";
+type ActivityLevel = "sedentary" | "light" | "moderate" | "active";
+type DietType = "standard" | "vegetarian" | "vegan" | "keto" | "lactose_free" | "gluten_free";
+
+export default function DietCreator() {
   const { user } = useAuth();
-  
-  // Stan kontrolujący obecny krok karuzeli (1 do 4)
   const [step, setStep] = useState(1);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedDiet, setGeneratedDiet] = useState<any>(null);
   
-  // Stan przechowujący dane wejściowe formularza
+  // Główny stan formularza
   const [formData, setFormData] = useState({
+    goal: "lose_weight" as Goal,
+    dietType: "standard" as DietType,
+    gender: null as Gender | null,
     age: "",
-    gender: "",
-    weight_kg: "",
-    height_cm: "",
-    activity_level: "",
-    diet_type: "",
-    goal: "",
-    disliked_ingredients: "",
+    weight: "",
+    height: "",
+    activityLevel: "light" as ActivityLevel,
+    days: 3,
+    mealsCount: 4,
+    disliked: ""
   });
 
-  // Stany dla komunikacji z backendem
-  const [profileData, setProfileData] = useState<any>(null);
-  const [dietPlan, setDietPlan] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // --- OBLICZENIA MATEMATYCZNE ---
+  const metrics = useMemo(() => {
+    const w = parseFloat(formData.weight);
+    const h = parseFloat(formData.height);
+    const a = parseInt(formData.age);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL
+    if (!w || !h || !a || !formData.gender) return null;
 
-  // Funkcja aktualizująca stan formularza
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
+    const heightM = h / 100;
+    const bmi = +(w / (heightM * heightM)).toFixed(1);
 
-  // --- WALIDACJA KROKÓW ---
-  const isStep1Valid = formData.age && formData.gender && formData.weight_kg && formData.height_cm && formData.activity_level;
-  const isStep2Valid = formData.diet_type && formData.goal;
-  // Krok 3 jest zawsze poprawny (składniki nielubiane są opcjonalne)
+    let bmr = (10 * w) + (6.25 * h) - (5 * a);
+    bmr += formData.gender === "male" ? 5 : -161;
 
-  // --- KOMUNIKACJA Z BACKENDEM ---
+    const activityMultipliers = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725 };
+    const tdee = bmr * activityMultipliers[formData.activityLevel];
 
-  // 1. Zapis profilu po ukończeniu kroku 3
-  const handleSaveProfile = async () => {
-    if (!user) return;
-    setIsLoading(true);
-    setError(null);
+    let targetCalories = tdee;
+    if (formData.goal === "lose_weight") targetCalories -= 500;
+    if (formData.goal === "gain_weight") targetCalories += 500;
 
+    return { bmi, bmr: Math.round(bmr), targetCalories: Math.round(targetCalories) };
+  }, [formData]);
+
+  // --- WYSYŁKA DO API ---
+  const handleGenerateAndSave = async () => {
+    if (!metrics || !user) {
+      alert("Zaloguj się i wypełnij wszystkie dane!");
+      return;
+    }
+    
+    setIsGenerating(true);
+    
     try {
+      // Przygotowanie tokenu Firebase do autoryzacji z FastAPI
       const token = await user.getIdToken();
-      
-      // Formatujemy dane pod to, czego oczekuje Pydantic w FastAPI
-      const payload = {
-        age: Number(formData.age),
-        gender: formData.gender,
-        weight_kg: Number(formData.weight_kg),
-        height_cm: Number(formData.height_cm),
-        activity_level: formData.activity_level,
-        diet_type: formData.diet_type,
-        goal: formData.goal,
-        // Zamieniamy tekst po przecinkach na tablicę stringów
-        disliked_ingredients: formData.disliked_ingredients
-          .split(",")
-          .map((item) => item.trim())
-          .filter((item) => item !== ""),
+      const headers = {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
       };
 
-      const res = await fetch(`${API_URL}/api/profiles`, {
+      // 1. Zapis/Aktualizacja Profilu
+      await fetch("http://127.0.0.1:8000/api/profiles", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify(payload),
+        headers,
+        body: JSON.stringify({
+          age: parseInt(formData.age),
+          height_cm: parseFloat(formData.height),
+          weight_kg: parseFloat(formData.weight),
+          gender: formData.gender,
+          activity_level: formData.activityLevel,
+          goal: formData.goal,
+          diet_type: formData.dietType,
+          disliked_ingredients: formData.disliked.split(",").map(i => i.trim()).filter(i => i)
+        })
       });
 
-      if (!res.ok) throw new Error("Nie udało się zapisać profilu.");
-      
-      const savedProfile = await res.json();
-      setProfileData(savedProfile); // Zapisujemy wynik (BMI, BMR) w stanie
-      setStep(4); // Przechodzimy do ekranu podsumowania
+      // 2. Wygenerowanie Diety AI
+      const dietRes = await fetch("http://127.0.0.1:8000/api/profiles/diets", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          diet_type_override: formData.dietType,
+          days: formData.days,
+          meals_count: formData.mealsCount,
+          target_calories: metrics.targetCalories,
+          disliked_ingredients: formData.disliked.split(",").map(i => i.trim()).filter(i => i)
+        })
+      });
 
-    } catch (err: any) {
-      setError(err.message);
+      if (!dietRes.ok) throw new Error("Błąd podczas generowania diety");
+      
+      const dietData = await dietRes.json();
+      setGeneratedDiet(dietData); // Przejście do widoku wyników
+      
+    } catch (error) {
+      console.error(error);
+      alert("Wystąpił błąd. Spróbuj ponownie.");
     } finally {
-      setIsLoading(false);
+      setIsGenerating(false);
     }
   };
 
-  // 2. Generowanie diety w kroku 4
-  const handleGenerateDiet = async () => {
-    if (!user) return;
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch(`${API_URL}/api/profiles/diets`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({ diet_type_override: null }), // Używamy domyślnego z profilu
-      });
-
-      if (!res.ok) throw new Error("Błąd podczas generowania diety.");
-      
-      const generatedDiet = await res.json();
-      setDietPlan(generatedDiet);
-
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setIsLoading(false);
-    }
+  const updateForm = (key: keyof typeof formData, value: any) => {
+    setFormData(prev => ({ ...prev, [key]: value }));
   };
 
-  // --- RENDEROWANIE INTERFEJSU ---
+  // --- WIDOK: GOTOWA DIETA (Zastępuje formularz po wygenerowaniu) ---
+  if (generatedDiet) {
+    return <DietResultView dietPlan={generatedDiet} />;
+  }
+
+  // --- WIDOK: EKRAN ŁADOWANIA (Gdy Gemini "myśli") ---
+  if (isGenerating) {
+    return (
+      <div className="min-h-screen bg-[#fdfbf7] flex flex-col items-center justify-center p-6">
+        <Loader2 className="w-16 h-16 text-orange-500 animate-spin mb-6" />
+        <h2 className="text-2xl font-bold text-stone-800 mb-2">Sztuczna inteligencja układa Twój plan...</h2>
+        <p className="text-stone-500 text-center max-w-md">
+          Bierzemy pod uwagę Twoje zapotrzebowanie ({metrics?.targetCalories} kcal), wybrane posiłki oraz wykluczenia. To potrwa kilka do kilkunastu sekund.
+        </p>
+      </div>
+    );
+  }
+
+  // --- WIDOK FORMULARZA (Kroki 1-5) ---
   return (
-    <div className="max-w-2xl mx-auto p-6 bg-white rounded-xl shadow-lg mt-10 border border-gray-100">
-      
-      {/* Pasek postępu */}
-      <div className="mb-8">
-        <div className="flex justify-between text-xs text-gray-500 mb-2 px-2">
-          <span className={step >= 1 ? "text-blue-600 font-bold" : ""}>Fizjologia</span>
-          <span className={step >= 2 ? "text-blue-600 font-bold" : ""}>Cel</span>
-          <span className={step >= 3 ? "text-blue-600 font-bold" : ""}>Wykluczenia</span>
-          <span className={step >= 4 ? "text-green-600 font-bold" : ""}>Wynik</span>
-        </div>
-        <div className="h-2 bg-gray-200 rounded-full">
-          <div 
-            className="h-full bg-blue-600 rounded-full transition-all duration-300" 
-            style={{ width: `${(step / 4) * 100}%` }}
-          ></div>
+    <div className="min-h-screen bg-[#fdfbf7] flex flex-col items-center pt-10 px-4 pb-24 font-sans">
+      <Header step={step} />
+      <Stepper step={step} />
+
+      <div className="w-full max-w-3xl bg-white p-6 sm:p-10 rounded-3xl shadow-xl shadow-stone-200/50 border border-orange-50">
+        
+        {/* KROK 1: CEL */}
+        {step === 1 && (
+          <div className="animate-in fade-in slide-in-from-right-4 space-y-4">
+            <h2 className="text-2xl font-bold text-stone-800 text-center mb-6">Jaki jest Twój główny cel?</h2>
+            {[
+              { id: "lose_weight", title: "Chcę schudnąć", desc: "Deficyt kaloryczny, redukcja tkanki tłuszczowej" },
+              { id: "maintain", title: "Chcę utrzymać wagę", desc: "Zbilansowana dieta dla zdrowia" },
+              { id: "gain_weight", title: "Chcę przytyć", desc: "Nadwyżka kaloryczna, budowa masy" }
+            ].map((g) => (
+              <button
+                key={g.id}
+                onClick={() => updateForm("goal", g.id)}
+                className={`w-full text-left p-5 rounded-2xl border-2 transition-all ${
+                  formData.goal === g.id ? "border-orange-500 bg-orange-50 shadow-md" : "border-stone-100 hover:border-orange-200"
+                }`}
+              >
+                <p className={`font-bold text-lg ${formData.goal === g.id ? "text-orange-700" : "text-stone-700"}`}>{g.title}</p>
+                <p className="text-stone-500 text-sm mt-1">{g.desc}</p>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* KROK 2: DIETA */}
+        {step === 2 && (
+          <div className="animate-in fade-in slide-in-from-right-4">
+            <h2 className="text-2xl font-bold text-stone-800 text-center mb-6">Wybierz styl odżywiania</h2>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { id: "standard", label: "Standardowa", emoji: "🥗" },
+                { id: "vegetarian", label: "Wegetariańska", emoji: "🥦" },
+                { id: "vegan", label: "Wegańska", emoji: "🌱" },
+                { id: "keto", label: "Keto", emoji: "🥑" },
+                { id: "lactose_free", label: "Bez laktozy", emoji: "🥛" },
+                { id: "gluten_free", label: "Bez glutenu", emoji: "🌾" }
+              ].map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => updateForm("dietType", d.id)}
+                  className={`p-4 flex flex-col items-center justify-center rounded-2xl border-2 transition-all ${
+                    formData.dietType === d.id ? "border-orange-500 bg-orange-50 shadow-md" : "border-stone-100 hover:border-orange-200"
+                  }`}
+                >
+                  <span className="text-3xl mb-2">{d.emoji}</span>
+                  <span className="font-bold text-stone-700">{d.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* KROK 3: DANE (Zachowany z wcześniejszych ustaleń) */}
+        {step === 3 && (
+          <div className="animate-in fade-in slide-in-from-right-4">
+            <div className="flex flex-col items-center mb-8">
+              <div className="w-12 h-12 bg-orange-100 rounded-2xl flex items-center justify-center mb-4">
+                <BarChart2 className="w-6 h-6 text-orange-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-stone-800">Twoje dane</h2>
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-bold text-stone-700 mb-3">Płeć</label>
+              <div className="grid grid-cols-2 gap-4">
+                {["male", "female"].map((g) => (
+                  <button
+                    key={g}
+                    onClick={() => updateForm("gender", g)}
+                    className={`py-4 rounded-xl border-2 font-bold flex items-center justify-center gap-2 ${
+                      formData.gender === g ? "border-orange-500 bg-orange-50 text-orange-700" : "border-stone-200 text-stone-600"
+                    }`}
+                  >
+                    {g === "male" ? "👨 Mężczyzna" : "👩 Kobieta"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              {(["age", "weight", "height"] as const).map((field) => (
+                <div key={field}>
+                  <label className="block text-sm font-bold text-stone-700 mb-2 capitalize">
+                    {field === "age" ? "Wiek" : field === "weight" ? "Waga (kg)" : "Wzrost (cm)"}
+                  </label>
+                  <input 
+                    type="number" value={formData[field]} onChange={(e) => updateForm(field, e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-stone-200 focus:border-orange-500 focus:ring-0 text-center font-medium outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+            
+            <div>
+              <label className="block text-sm font-bold text-stone-700 mb-3">Aktywność fizyczna</label>
+              <select 
+                value={formData.activityLevel} onChange={(e) => updateForm("activityLevel", e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border-2 border-stone-200 focus:border-orange-500 font-medium text-stone-700 outline-none bg-white"
+              >
+                <option value="sedentary">Brak (Praca siedząca)</option>
+                <option value="light">Lekka (1-2 treningi/tydz)</option>
+                <option value="moderate">Średnia (3-4 treningi/tydz)</option>
+                <option value="active">Wysoka (Fizyczna praca / 5+ treningów)</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* KROK 4: PREFERENCJE DOT. WYGENEROWANIA */}
+        {step === 4 && (
+          <div className="animate-in fade-in slide-in-from-right-4 space-y-8">
+            <h2 className="text-2xl font-bold text-stone-800 text-center mb-6">Szczegóły jadłospisu</h2>
+            
+            <div>
+              <label className="flex justify-between text-sm font-bold text-stone-700 mb-4">
+                <span>Na ile dni ułożyć plan?</span>
+                <span className="text-orange-600 bg-orange-100 px-3 py-1 rounded-full">{formData.days} dni</span>
+              </label>
+              <input 
+                type="range" min="1" max="7" step="1"
+                value={formData.days} onChange={(e) => updateForm("days", parseInt(e.target.value))}
+                className="w-full accent-orange-500"
+              />
+              <div className="flex justify-between text-xs text-stone-400 mt-2">
+                <span>1 dzień (testowy)</span><span>7 dni (tydzień)</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="flex justify-between text-sm font-bold text-stone-700 mb-4">
+                <span>Ilość posiłków dziennie</span>
+                <span className="text-orange-600 bg-orange-100 px-3 py-1 rounded-full">{formData.mealsCount} posiłków</span>
+              </label>
+              <input 
+                type="range" min="3" max="6" step="1"
+                value={formData.mealsCount} onChange={(e) => updateForm("mealsCount", parseInt(e.target.value))}
+                className="w-full accent-orange-500"
+              />
+              <div className="flex justify-between text-xs text-stone-400 mt-2">
+                <span>3 posiłki (Duże)</span><span>6 posiłków (Mniejsze)</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-stone-700 mb-2">Czego nie lubisz? (Wykluczenia)</label>
+              <textarea 
+                rows={3}
+                placeholder="Np. pomidory, oliwki, grzyby, ryby..."
+                value={formData.disliked} onChange={(e) => updateForm("disliked", e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border-2 border-stone-200 focus:border-orange-500 outline-none text-stone-700 resize-none"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* KROK 5: PODSUMOWANIE I GENEROWANIE */}
+        {step === 5 && (
+          <div className="animate-in fade-in slide-in-from-right-4 text-center">
+            <div className="w-16 h-16 bg-gradient-to-tr from-orange-500 to-amber-400 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-orange-500/30">
+              <Flame className="w-8 h-8 text-white" />
+            </div>
+            <h2 className="text-3xl font-extrabold text-stone-800 mb-2">Podsumowanie</h2>
+            <p className="text-stone-500 mb-8">Zapiszemy te dane w Twoim profilu i wygenerujemy dietę.</p>
+            
+            {metrics && (
+              <div className="grid grid-cols-3 gap-4 mb-10">
+                <div className="bg-orange-50 rounded-2xl p-4 border border-orange-100">
+                  <Scale className="w-6 h-6 text-orange-500 mx-auto mb-2" />
+                  <p className="text-[10px] sm:text-xs text-stone-500 uppercase font-bold tracking-wider">Twoje BMI</p>
+                  <p className="text-xl sm:text-2xl font-black text-stone-800">{metrics.bmi}</p>
+                </div>
+                <div className="bg-orange-50 rounded-2xl p-4 border border-orange-100">
+                  <Activity className="w-6 h-6 text-orange-500 mx-auto mb-2" />
+                  <p className="text-[10px] sm:text-xs text-stone-500 uppercase font-bold tracking-wider">Metabolizm</p>
+                  <p className="text-xl sm:text-2xl font-black text-stone-800">{metrics.bmr} <span className="text-xs">kcal</span></p>
+                </div>
+                <div className="bg-gradient-to-b from-orange-500 to-orange-600 rounded-2xl p-4 shadow-md text-white transform scale-105">
+                  <Apple className="w-6 h-6 text-white mx-auto mb-2 opacity-80" />
+                  <p className="text-[10px] sm:text-xs text-orange-100 uppercase font-bold tracking-wider">Cel (Dziennie)</p>
+                  <p className="text-xl sm:text-2xl font-black">{metrics.targetCalories} <span className="text-xs font-medium">kcal</span></p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* DOLNY PASEK NAWIGACJI */}
+        <div className="flex justify-between items-center mt-12 pt-6 border-t border-stone-100">
+          <button 
+            onClick={() => setStep(s => Math.max(1, s - 1))}
+            className={`flex items-center gap-2 px-4 py-3 rounded-xl font-bold transition-colors ${step === 1 ? "invisible" : "text-stone-500 hover:bg-stone-100"}`}
+          >
+            <ChevronLeft className="w-5 h-5" /> Wstecz
+          </button>
+          
+          {step < 5 ? (
+            <button 
+              onClick={() => setStep(s => Math.min(5, s + 1))}
+              disabled={step === 3 && (!formData.gender || !formData.age || !formData.weight || !formData.height)}
+              className="flex items-center gap-2 px-8 py-3 bg-stone-900 text-white rounded-xl font-bold hover:bg-stone-800 transition-all active:scale-95 disabled:opacity-50"
+            >
+              Dalej <ChevronRight className="w-5 h-5" />
+            </button>
+          ) : (
+            <button 
+              onClick={handleGenerateAndSave}
+              className="flex items-center gap-2 px-6 sm:px-8 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-bold hover:shadow-lg hover:shadow-orange-500/30 transition-all active:scale-95"
+            >
+              Generuj Plan <Flame className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </div>
+    </div>
+  );
+}
 
-      {error && <div className="p-3 mb-4 text-red-700 bg-red-100 rounded-lg text-sm">{error}</div>}
+// --- SUB-KOMPONENTY (Dla zachowania czystości kodu) ---
 
-      {/* --- KROK 1: DANE FIZYCZNE --- */}
-      {step === 1 && (
-        <div className="animate-fade-in">
-          <h2 className="text-2xl font-bold mb-6 text-gray-800">Powiedz nam coś o sobie</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Wiek</label>
-              <input type="number" name="age" value={formData.age} onChange={handleChange} className="w-full border p-3 rounded-lg bg-gray-50" placeholder="np. 28" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Płeć</label>
-              <select name="gender" value={formData.gender} onChange={handleChange} className="w-full border p-3 rounded-lg bg-gray-50">
-                <option value="">Wybierz...</option>
-                <option value="male">Mężczyzna</option>
-                <option value="female">Kobieta</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Waga (kg)</label>
-              <input type="number" name="weight_kg" value={formData.weight_kg} onChange={handleChange} className="w-full border p-3 rounded-lg bg-gray-50" placeholder="np. 75" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Wzrost (cm)</label>
-              <input type="number" name="height_cm" value={formData.height_cm} onChange={handleChange} className="w-full border p-3 rounded-lg bg-gray-50" placeholder="np. 175" />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Poziom aktywności w ciągu dnia</label>
-              <select name="activity_level" value={formData.activity_level} onChange={handleChange} className="w-full border p-3 rounded-lg bg-gray-50">
-                <option value="">Wybierz...</option>
-                <option value="sedentary">Siedzący (brak ćwiczeń, praca biurowa)</option>
-                <option value="light">Lekki (lekkie ćwiczenia 1-3 razy w tygodniu)</option>
-                <option value="moderate">Umiarkowany (ćwiczenia 3-5 razy w tygodniu)</option>
-                <option value="active">Aktywny (ciężkie ćwiczenia codziennie)</option>
-              </select>
-            </div>
+function Header({ step }: { step: number }) {
+  const titles = ["Wybór celu", "Rodzaj diety", "Dane biometryczne", "Preferencje jadłospisu", "Zapis i generowanie"];
+  return (
+    <div className="text-center mb-8">
+      <h1 className="text-3xl font-extrabold text-stone-800 tracking-tight">Kreator <span className="text-orange-500">diety</span></h1>
+      <p className="text-stone-500 mt-2 font-medium">Krok {step} z 5 — {titles[step - 1]}</p>
+    </div>
+  );
+}
+
+function Stepper({ step }: { step: number }) {
+  const steps = [1, 2, 3, 4, 5];
+  return (
+    <div className="flex items-center justify-center w-full max-w-xl mb-12">
+      {steps.map((s, idx) => (
+        <div key={s} className="flex items-center">
+          <div className={`w-10 h-10 flex items-center justify-center rounded-full border-2 font-bold transition-all ${
+            step > s ? "bg-orange-100 border-orange-500 text-orange-600" : step === s ? "bg-orange-500 border-orange-500 text-white shadow-lg" : "bg-white border-stone-200 text-stone-400"
+          }`}>
+            {step > s ? <Check className="w-5 h-5" /> : s}
           </div>
-          <div className="mt-8 flex justify-end">
-            <button 
-              onClick={() => setStep(2)} 
-              disabled={!isStep1Valid}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition"
-            >
-              Dalej
-            </button>
-          </div>
+          {idx < steps.length - 1 && <div className={`w-8 sm:w-12 h-1 mx-1 sm:mx-3 rounded transition-colors ${step > s ? "bg-orange-500" : "bg-stone-200"}`} />}
         </div>
-      )}
+      ))}
+    </div>
+  );
+}
 
-      {/* --- KROK 2: CEL I DIETA --- */}
-      {step === 2 && (
-        <div className="animate-fade-in">
-          <h2 className="text-2xl font-bold mb-6 text-gray-800">Jaki jest Twój cel?</h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Twój cel sylwetkowy</label>
-              <select name="goal" value={formData.goal} onChange={handleChange} className="w-full border p-3 rounded-lg bg-gray-50">
-                <option value="">Wybierz...</option>
-                <option value="lose_weight">Chcę schudnąć</option>
-                <option value="maintain">Chcę utrzymać wagę</option>
-                <option value="gain_weight">Chcę przytyć / zbudować masę</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Preferowany typ diety</label>
-              <select name="diet_type" value={formData.diet_type} onChange={handleChange} className="w-full border p-3 rounded-lg bg-gray-50">
-                <option value="">Wybierz...</option>
-                <option value="standard">Standardowa (Wszystkożerna)</option>
-                <option value="vegetarian">Wegetariańska</option>
-                <option value="vegan">Wegańska</option>
-                <option value="keto">Ketogeniczna (Keto)</option>
-                <option value="lactose_free">Bez laktozy</option>
-              </select>
-            </div>
-          </div>
-          <div className="mt-8 flex justify-between">
-            <button onClick={() => setStep(1)} className="text-gray-600 px-6 py-2 border rounded-lg hover:bg-gray-50 transition">Wróć</button>
-            <button 
-              onClick={() => setStep(3)} 
-              disabled={!isStep2Valid}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium disabled:opacity-50 transition"
-            >
-              Dalej
-            </button>
-          </div>
+// --- KOMPONENT WYŚWIETLAJĄCY GOTOWĄ DIETĘ (Mapowanie zagnieżdżonych list) ---
+function DietResultView({ dietPlan }: { dietPlan: any }) {
+  // Stan przechowujący indeks aktualnie wyświetlanego dnia
+  const [currentDayIndex, setCurrentDayIndex] = useState(0);
+  
+  const daysCount = dietPlan.content.length;
+  const currentDayData = dietPlan.content[currentDayIndex];
+
+  // Funkcja wyliczająca datę dla danego indeksu (zawsze startuje od jutra)
+  const getFormattedDate = (index: number) => {
+    const date = new Date();
+    // +1 oznacza jutro. Kolejne indeksy dodają kolejne dni.
+    date.setDate(date.getDate() + 1 + index); 
+    
+    // Używamy polskiego formatowania (np. "piątek, 4 września")
+    const formatted = new Intl.DateTimeFormat('pl-PL', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long'
+    }).format(date);
+    
+    // Zwracamy z wielką literą na początku
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+  };
+
+  const handlePrev = () => setCurrentDayIndex(prev => Math.max(0, prev - 1));
+  const handleNext = () => setCurrentDayIndex(prev => Math.min(daysCount - 1, prev + 1));
+
+  return (
+    <div className="min-h-screen bg-[#fdfbf7] py-10 px-4 md:px-10">
+      <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4">
+        
+        {/* NAGŁÓWEK SUKCESU */}
+        <div className="bg-orange-500 text-white p-6 sm:p-8 rounded-3xl mb-8 shadow-lg shadow-orange-500/20 text-center">
+          <h1 className="text-2xl sm:text-3xl font-black mb-2">Twój plan jest gotowy! 🎉</h1>
+          <p className="text-orange-100 text-sm sm:text-lg">Zaczynamy od jutra. Powodzenia w realizacji celu.</p>
         </div>
-      )}
 
-      {/* --- KROK 3: WYKLUCZENIA --- */}
-      {step === 3 && (
-        <div className="animate-fade-in">
-          <h2 className="text-2xl font-bold mb-6 text-gray-800">Czego nie lubisz?</h2>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Wpisz składniki po przecinku (opcjonalnie)</label>
-            <input 
-              type="text" 
-              name="disliked_ingredients" 
-              value={formData.disliked_ingredients} 
-              onChange={handleChange} 
-              className="w-full border p-3 rounded-lg bg-gray-50" 
-              placeholder="np. pomidory, oliwki, grzyby" 
-            />
-            <p className="text-xs text-gray-500 mt-2">Dzięki temu nasza AI pominie te składniki w Twoim jadłospisie.</p>
-          </div>
-          <div className="mt-8 flex justify-between">
-            <button onClick={() => setStep(2)} className="text-gray-600 px-6 py-2 border rounded-lg hover:bg-gray-50 transition">Wróć</button>
-            <button 
-              onClick={handleSaveProfile} 
-              disabled={isLoading}
-              className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition"
-            >
-              {isLoading ? "Zapisywanie..." : "Zatwierdź i oblicz"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* --- KROK 4: PODSUMOWANIE I GENEROWANIE --- */}
-      {step === 4 && profileData && !dietPlan && (
-        <div className="animate-fade-in text-center">
-          <h2 className="text-3xl font-bold mb-2 text-gray-800">Twój Profil Gotowy! 🎉</h2>
-          <p className="text-gray-600 mb-8">Obliczyliśmy Twoje zapotrzebowanie na podstawie podanych danych.</p>
+        {/* NAWIGACJA DNI (KONTROLER) */}
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-orange-100 flex items-center justify-between mb-8 sticky top-[88px] z-40">
+          <button 
+            onClick={handlePrev} 
+            disabled={currentDayIndex === 0}
+            className="p-3 rounded-xl bg-stone-50 text-stone-600 hover:bg-orange-50 hover:text-orange-600 transition-colors disabled:opacity-40 disabled:hover:bg-stone-50 disabled:hover:text-stone-600"
+          >
+            <ChevronLeft className="w-6 h-6" />
+          </button>
           
-          <div className="grid grid-cols-2 gap-4 mb-8 text-left">
-            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-              <p className="text-sm text-blue-600 font-semibold mb-1">Twoje BMI</p>
-              <p className="text-2xl font-bold text-gray-800">{profileData.bmi}</p>
-            </div>
-            <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
-              <p className="text-sm text-orange-600 font-semibold mb-1">Cel kaloryczny</p>
-              <p className="text-2xl font-bold text-gray-800">{profileData.target_calories} <span className="text-base font-normal">kcal</span></p>
-            </div>
+          <div className="flex flex-col items-center text-center px-4">
+            <span className="text-xs font-bold uppercase tracking-widest text-orange-500 mb-1 flex items-center gap-2">
+              <Calendar className="w-4 h-4" /> Dzień {currentDayIndex + 1} z {daysCount}
+            </span>
+            <h2 className="text-lg sm:text-xl font-extrabold text-stone-800">
+              {getFormattedDate(currentDayIndex)}
+            </h2>
           </div>
 
           <button 
-            onClick={handleGenerateDiet}
-            disabled={isLoading}
-            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-4 rounded-xl font-bold text-lg shadow-md transition transform hover:-translate-y-1"
+            onClick={handleNext} 
+            disabled={currentDayIndex === daysCount - 1}
+            className="p-3 rounded-xl bg-stone-50 text-stone-600 hover:bg-orange-50 hover:text-orange-600 transition-colors disabled:opacity-40 disabled:hover:bg-stone-50 disabled:hover:text-stone-600"
           >
-            {isLoading ? "🧠 Gemini układa Twój jadłospis..." : "✨ Wygeneruj pierwszą dietę"}
+            <ChevronRight className="w-6 h-6" />
           </button>
         </div>
-      )}
-
-      {/* --- WYNIK: WYGENEROWANA DIETA --- */}
-      {step === 4 && dietPlan && (
-        <div className="animate-fade-in">
-          <h2 className="text-2xl font-bold mb-4 text-green-700">Jadłospis na: {dietPlan.content.day_of_week}</h2>
-          <div className="space-y-4">
-            {dietPlan.content.meals.map((meal: any, idx: number) => (
-              <div key={idx} className="border p-4 rounded-xl bg-white shadow-sm">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="text-lg font-bold text-gray-800">{meal.meal_type}: {meal.name}</h3>
-                  <span className="bg-green-100 text-green-800 text-xs font-bold px-2 py-1 rounded">{meal.calories} kcal</span>
+        
+        {/* LISTA POSIŁKÓW DLA WYBRANEGO DNIA */}
+        <div className="space-y-6 animate-in slide-in-from-right-4">
+          {currentDayData.meals.map((meal: any, mealIdx: number) => (
+            <div key={mealIdx} className="bg-white border border-stone-100 p-6 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
+              
+              {/* Nagłówek posiłku i makro */}
+              <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-4 gap-4">
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-orange-500 bg-orange-50 px-3 py-1 rounded-full mb-2 inline-block">
+                    {meal.meal_type}
+                  </span>
+                  <h3 className="text-xl font-bold text-stone-800">{meal.name}</h3>
                 </div>
-                <div className="mb-3">
-                  <p className="text-sm font-semibold text-gray-700 mb-1">Składniki:</p>
-                  <ul className="list-disc pl-5 text-sm text-gray-600">
-                    {meal.ingredients.map((ing: string, i: number) => (
-                      <li key={i}>{ing}</li>
+                
+                <div className="flex gap-2 sm:gap-4 text-xs sm:text-sm font-semibold bg-stone-50 p-3 rounded-xl border border-stone-100 w-full md:w-auto overflow-x-auto">
+                  <div className="text-center min-w-[60px]"><p className="text-stone-400 text-[10px]">KCAL</p><p className="text-stone-800">{meal.macros.calories}</p></div>
+                  <div className="text-center min-w-[60px]"><p className="text-stone-400 text-[10px]">BIAŁKO</p><p className="text-orange-600">{meal.macros.protein}g</p></div>
+                  <div className="text-center min-w-[60px]"><p className="text-stone-400 text-[10px]">TŁUSZCZE</p><p className="text-orange-600">{meal.macros.fat}g</p></div>
+                  <div className="text-center min-w-[60px]"><p className="text-stone-400 text-[10px]">WĘGLE</p><p className="text-orange-600">{meal.macros.carbs}g</p></div>
+                </div>
+              </div>
+
+              {/* Lista składników i przepis */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                <div>
+                  <h4 className="font-bold text-stone-800 mb-3 flex items-center gap-2">🛒 Składniki</h4>
+                  <ul className="space-y-2 text-stone-600 text-sm">
+                    {meal.ingredients.map((ing: any, i: number) => (
+                      <li key={i} className="flex justify-between border-b border-stone-50 pb-1">
+                        <span>{ing.name}</span>
+                        <span className="font-semibold text-stone-800">{ing.amount} {ing.unit}</span>
+                      </li>
                     ))}
                   </ul>
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-gray-700 mb-1">Przygotowanie:</p>
-                  <p className="text-sm text-gray-600">{meal.recipe}</p>
+                  <h4 className="font-bold text-stone-800 mb-3 flex items-center gap-2">👨‍🍳 Przygotowanie</h4>
+                  <ol className="list-decimal list-inside space-y-2 text-stone-600 text-sm">
+                    {meal.instructions.map((step: string, i: number) => (
+                      <li key={i} className="pl-1">{step}</li>
+                    ))}
+                  </ol>
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
-      )}
+
+      </div>
     </div>
   );
 }
