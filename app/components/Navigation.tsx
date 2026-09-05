@@ -37,7 +37,7 @@ export default function Navigation() {
   const bottomNavItems = [
     { name: "Home", href: "/", icon: Home },
     { name: "Przepisy", href: "/przepisy", icon: Utensils },
-    { name: "Generuj", href: "/dashboard", icon: Sparkles, isPrimary: true },
+    { name: "Generuj", href: "/kreator-diety", icon: Sparkles, isPrimary: true },
     { name: "Ulubione", href: "/ulubione", icon: Heart },
     { name: "Profil", href: "/auth", icon: User },
   ];
