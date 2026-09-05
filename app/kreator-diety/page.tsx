@@ -6,6 +6,8 @@ import { useAuth } from "../../lib/AuthContext";
 // Importujemy nasz nowy komponent (upewnij się, że ścieżka jest poprawna)
 import ProfileWizard from "../components/profileWizard"
 
+
+
 export default function DietCreator() {
   const { user, loading } = useAuth();
   const router = useRouter();

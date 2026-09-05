@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Clock, Flame, Utensils, ChevronRight } from "lucide-react";
 
-// Definiujemy interfejs dla elementów na liście (może być okrojony względem pełnego przepisu)
+
 interface RecipeListItem {
   recipe_id: string;
   slug: string;
@@ -13,8 +13,10 @@ interface RecipeListItem {
   };
   diet_types: string[];
 }
+
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL
-// Funkcja pobierająca listę z serwera FastAPI
+
 async function getRecipes(): Promise<RecipeListItem[]> {
   const res = await fetch(`${API_URL}/api/recipes/`, {
     cache: "no-cache", // Zmień na 'force-cache' lub dodaj 'next: { revalidate: 3600 }' w produkcji

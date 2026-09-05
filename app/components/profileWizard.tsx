@@ -10,6 +10,8 @@ type Gender = "male" | "female";
 type ActivityLevel = "sedentary" | "light" | "moderate" | "active";
 type DietType = "standard" | "vegetarian" | "vegan" | "keto" | "lactose_free" | "gluten_free";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL
+
 export default function DietCreator() {
   const { user } = useAuth();
   const [step, setStep] = useState(1);
@@ -72,7 +74,7 @@ export default function DietCreator() {
       };
 
       // 1. Zapis/Aktualizacja Profilu
-      await fetch("http://127.0.0.1:8000/api/profiles", {
+      await fetch(`${API_URL}/api/profiles/` , {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -88,7 +90,7 @@ export default function DietCreator() {
       });
 
       // 2. Wygenerowanie Diety AI
-      const dietRes = await fetch("http://127.0.0.1:8000/api/profiles/diets", {
+      const dietRes = await fetch(`${API_URL}/api/profiles/diets`, {
         method: "POST",
         headers,
         body: JSON.stringify({

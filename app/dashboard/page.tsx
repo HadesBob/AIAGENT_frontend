@@ -9,6 +9,8 @@ import {
   ChevronRight, Utensils, AlertCircle, Loader2, Sparkles, Apple 
 } from "lucide-react";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL
+
 export default function Dashboard() {
   const { user } = useAuth();
   
@@ -28,14 +30,14 @@ export default function Dashboard() {
         };
 
         // 1. Pobranie profilu użytkownika
-        const profileRes = await fetch(`http://127.0.0.1:8000/api/profiles/${user.uid}`, { headers });
+        const profileRes = await fetch(`${API_URL}/api/profiles/${user.uid}`, { headers });
         if (profileRes.ok) {
           const profileData = await profileRes.json();
           setProfile(profileData);
         }
 
         // 2. Pobranie historii diet (najnowsza jest pierwsza na liście)
-        const dietsRes = await fetch(`http://127.0.0.1:8000/api/profiles/diets`, { headers });
+        const dietsRes = await fetch(`${API_URL}/api/profiles/diet`, { headers });
         if (dietsRes.ok) {
           const dietsData = await dietsRes.json();
           if (dietsData && dietsData.length > 0) {
